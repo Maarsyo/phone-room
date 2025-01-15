@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback  } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Environment } from "@react-three/drei";
 
@@ -25,6 +25,7 @@ import { LuMessageCircle } from "react-icons/lu";
 import { FaBolt, FaSyncAlt, FaCamera } from "react-icons/fa";  // Adicione se não tiver
 
 
+
 import "./App.css";
 
 /**
@@ -39,6 +40,216 @@ function BackgroundModel({ rotationY, positionY }) {
       rotation={[0, rotationY, 0]}
       position={[0, positionY, 0]}
     />
+  );
+}
+function SnakeGame({ onBack }) {
+  const GRID_SIZE = 20;
+  const CELL_SIZE = 15;
+  const INITIAL_SPEED = 150;
+
+  const [snake, setSnake] = useState([[5, 5]]);
+  const [food, setFood] = useState([10, 10]);
+  const [direction, setDirection] = useState('RIGHT');
+  const [gameOver, setGameOver] = useState(false);
+  const [score, setScore] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const generateFood = useCallback(() => {
+    return [
+      Math.floor(Math.random() * GRID_SIZE),
+      Math.floor(Math.random() * GRID_SIZE)
+    ];
+  }, []);
+
+  const isOnSnake = useCallback((pos) => {
+    return snake.some(segment => segment[0] === pos[0] && segment[1] === pos[1]);
+  }, [snake]);
+
+  const getNewFoodPosition = useCallback(() => {
+    let newFood;
+    do {
+      newFood = generateFood();
+    } while (isOnSnake(newFood));
+    return newFood;
+  }, [generateFood, isOnSnake]);
+
+  const resetGame = () => {
+    setSnake([[5, 5]]);
+    setFood(getNewFoodPosition());
+    setDirection('RIGHT');
+    setGameOver(false);
+    setScore(0);
+    setIsPaused(false);
+  };
+
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (gameOver) return;
+      
+      switch (e.key) {
+        case 'ArrowUp':
+          if (direction !== 'DOWN') setDirection('UP');
+          break;
+        case 'ArrowDown':
+          if (direction !== 'UP') setDirection('DOWN');
+          break;
+        case 'ArrowLeft':
+          if (direction !== 'RIGHT') setDirection('LEFT');
+          break;
+        case 'ArrowRight':
+          if (direction !== 'LEFT') setDirection('RIGHT');
+          break;
+        case ' ':
+          setIsPaused(prev => !prev);
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [direction, gameOver]);
+
+  useEffect(() => {
+    if (gameOver || isPaused) return;
+
+    const moveSnake = () => {
+      const newSnake = [...snake];
+      const head = [...newSnake[0]];
+
+      switch (direction) {
+        case 'UP':
+          head[1] -= 1;
+          break;
+        case 'DOWN':
+          head[1] += 1;
+          break;
+        case 'LEFT':
+          head[0] -= 1;
+          break;
+        case 'RIGHT':
+          head[0] += 1;
+          break;
+        default:
+          break;
+      }
+
+      if (
+        head[0] < 0 ||
+        head[0] >= GRID_SIZE ||
+        head[1] < 0 ||
+        head[1] >= GRID_SIZE ||
+        isOnSnake(head)
+      ) {
+        setGameOver(true);
+        return;
+      }
+
+      newSnake.unshift(head);
+
+      if (head[0] === food[0] && head[1] === food[1]) {
+        setFood(getNewFoodPosition());
+        setScore(prev => prev + 10);
+      } else {
+        newSnake.pop();
+      }
+
+      setSnake(newSnake);
+    };
+
+    const gameInterval = setInterval(moveSnake, INITIAL_SPEED);
+    return () => clearInterval(gameInterval);
+  }, [snake, direction, food, gameOver, isPaused, getNewFoodPosition, isOnSnake]);
+
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    const touchX = touch.clientX;
+    const touchY = touch.clientY;
+
+    const dx = touchX - centerX;
+    const dy = touchY - centerY;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0 && direction !== 'LEFT') setDirection('RIGHT');
+      if (dx < 0 && direction !== 'RIGHT') setDirection('LEFT');
+    } else {
+      if (dy > 0 && direction !== 'UP') setDirection('DOWN');
+      if (dy < 0 && direction !== 'DOWN') setDirection('UP');
+    }
+  };
+
+  return (
+    <div 
+      className="w-full h-full bg-black flex flex-col items-center" 
+      onTouchStart={handleTouchStart}
+    >
+      <div className="flex justify-between items-center w-full p-4">
+        <button onClick={onBack} className="text-white">
+          <IoIosArrowBack size={24} />
+        </button>
+        <div className="text-yellow-400">Score: {score}</div>
+        <button 
+          onClick={() => setIsPaused(prev => !prev)}
+          className="text-white px-2 py-1 rounded"
+        >
+          {isPaused ? 'Resume' : 'Pause'}
+        </button>
+      </div>
+
+      <div 
+        className="relative border-2 border-gray-700"
+        style={{ 
+          width: GRID_SIZE * CELL_SIZE, 
+          height: GRID_SIZE * CELL_SIZE 
+        }}
+      >
+        <div
+          className="absolute bg-red-500 rounded-full"
+          style={{
+            width: CELL_SIZE - 2,
+            height: CELL_SIZE - 2,
+            left: food[0] * CELL_SIZE,
+            top: food[1] * CELL_SIZE,
+          }}
+        />
+
+        {snake.map((segment, index) => (
+          <div
+            key={index}
+            className="absolute bg-green-500"
+            style={{
+              width: CELL_SIZE - 2,
+              height: CELL_SIZE - 2,
+              left: segment[0] * CELL_SIZE,
+              top: segment[1] * CELL_SIZE,
+              borderRadius: index === 0 ? '4px' : '0',
+            }}
+          />
+        ))}
+      </div>
+
+      {gameOver && (
+        <div className="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center">
+          <div className="text-red-500 text-2xl mb-4">Game Over!</div>
+          <div className="text-yellow-400 mb-4">Score: {score}</div>
+          <button
+            onClick={resetGame}
+            className="bg-green-600 text-white px-4 py-2 rounded"
+          >
+            Play Again
+          </button>
+        </div>
+      )}
+
+      {isPaused && !gameOver && (
+        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center">
+          <div className="text-white text-2xl">Paused</div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -356,7 +567,6 @@ function MessagerApp({ onBack }) {
  * COPIE E COLE ESTE BLOCO NO LUGAR DO SEU "function PhoneApp({ onBack })"
  ***************************************************************************/
 function PhoneApp({ onBack }) {
-  // Aba ativa: "favorites", "recents", "contacts", "keypad"
   const [currentTab, setCurrentTab] = React.useState("favorites");
 
   const handleTabChange = (tab) => {
@@ -392,7 +602,7 @@ function PhoneApp({ onBack }) {
       {/* Conteúdo (aba selecionada) */}
       <div className="phone-body-content">{renderTabContent()}</div>
 
-      {/* Barra de navegação inferior (abas) */}
+      {/* Fixed navigation bar */}
       <div className="phone-nav-bar">
         <div
           className={`phone-nav-item ${currentTab === "favorites" ? "active" : ""}`}
@@ -415,7 +625,6 @@ function PhoneApp({ onBack }) {
           <IoIosContacts size={24} />
           <span>Contacts</span>
         </div>
-      
       </div>
     </div>
   );
@@ -445,11 +654,10 @@ function RecentsTab() {
 
 // Alguns contatos de exemplo
 const contactsData = [
-  { id: 1, name: "João da Silva", phone: "(11) 98765-4321" },
-  { id: 2, name: "Maria Oliveira", phone: "(11) 98234-5678" },
-  { id: 3, name: "Ana Paula", phone: "(21) 99999-8888" },
+  { id: 1, name: "Elon Musk", phone: "(415) 555-0123" },
+  { id: 2, name: "Anatoly Yakovenko", phone: "(650) 555-0456" },
+  { id: 3, name: "Donald Trump", phone: "(212) 555-0789" }
 ];
-
 // Aba Contacts
 function ContactsTab() {
   return (
@@ -532,7 +740,7 @@ function CameraApp({ onBack }) {
 
       {/* Área de preview da câmera (apenas ilustrativa) */}
       <div className="camera-preview">
-        <img src="https://media.discordapp.net/attachments/980182734611836978/1324594595287535719/image.png?ex=6778b859&is=677766d9&hm=74ae8b8cf6246409eabc2b1d358c9eddbb5ac861eb3105121142882b9e26c163&=&format=webp&quality=lossless&width=550&height=309" alt="" />
+        <img src="/background.png" alt="" />
       </div>
 
       {/* Barra inferior com botões de alternar câmera, disparo, etc. */}
@@ -576,17 +784,10 @@ function GameApp({ onBack }) {
  * e o conteúdo do app selecionado.
  */
 function PhoneScreen({ openApp, setOpenApp }) {
-  // Se nenhum app estiver aberto, mostramos a grid de ícones
   if (!openApp) {
     return (
       <div className="apps">
         <div className="column">
-          {/* <div className="app" onClick={() => setOpenApp("chat")}>
-            <div className="icon chat">
-              <TbPrompt />
-            </div>
-            <h1>ChatAI</h1>
-          </div> */}
           <div className="app" onClick={() => setOpenApp("messager")}>
             <div className="icon messager">
               <LuMessageCircle style={{ fontSize: "45px" }} />
@@ -598,6 +799,12 @@ function PhoneScreen({ openApp, setOpenApp }) {
               <FaPhoneAlt style={{ fontSize: "35px" }} />
             </div>
             <h1>Phone</h1>
+          </div>
+          <div className="app" onClick={() => setOpenApp("snake")}>
+            <div className="icon">
+              <IoGameController style={{ fontSize: "35px", color: "#4ade80" }} />
+            </div>
+            <h1>Snake</h1>
           </div>
         </div>
         <div className="column">
@@ -613,20 +820,16 @@ function PhoneScreen({ openApp, setOpenApp }) {
             </div>
             <h1>Settings</h1>
           </div>
-          
         </div>
       </div>
     );
   }
 
-  // Se um app estiver aberto, exibimos o componente correspondente
   const handleBack = () => {
     setOpenApp(null);
   };
 
   switch (openApp) {
-    case "chat":
-      return <ChatAIApp onBack={handleBack} />;
     case "messager":
       return <MessagerApp onBack={handleBack} />;
     case "phone":
@@ -635,19 +838,42 @@ function PhoneScreen({ openApp, setOpenApp }) {
       return <CameraApp onBack={handleBack} />;
     case "settings":
       return <SettingsApp onBack={handleBack} />;
-    case "game":
-      return <GameApp onBack={handleBack} />;
+    case "snake":
+      return <SnakeGame onBack={handleBack} />;
     default:
       return null;
   }
 }
 
+
 export default function App() {
   const [rotationY, setRotationY] = useState(2.7);
   const [positionY, setPositionY] = useState(-1.5);
-
-  // Estado que controla qual app está aberto
   const [openApp, setOpenApp] = useState(null);
+  const [currentTime, setCurrentTime] = useState("");
+
+  // Add time update effect
+  useEffect(() => {
+    const updateTime = () => {
+      const options = { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false,
+        timeZone: 'America/New_York'
+      };
+      const nyTime = new Date().toLocaleTimeString('en-US', options);
+      setCurrentTime(nyTime);
+    };
+
+    // Update immediately
+    updateTime();
+
+    // Update every minute
+    const interval = setInterval(updateTime, 60000);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div
@@ -659,38 +885,31 @@ export default function App() {
         position: "relative",
       }}
     >
-      {/* Canvas 3D no fundo (opcional) */}
       <Canvas camera={{ position: [0, 0, 10] }} style={{ background: "black" }}>
         <ambientLight intensity={0.2} />
         <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
         <Environment preset="city" />
-
         <BackgroundModel rotationY={rotationY} positionY={positionY} />
-
         <CameraControls />
       </Canvas>
 
-      {/* Celular fixo na posição (sem expandir) */}
       <div className="phone">
         <div className="container-phone">
-          {/* Cabeçalho */}
           <div className="top-header">
             <img src="/fruit.png" alt="" />
           </div>
-          {/* Barra de status do celular */}
           <div className="phone-infos">
             <div className="left">
               <FaSignal />
             </div>
             <div className="mid">
-              <h1>16:24</h1>
+              <h1>{currentTime}</h1>
             </div>
             <div className="right">
               <IoBatteryFullOutline />
             </div>
           </div>
 
-          {/* Corpo do celular (onde ficam os ícones ou o app aberto) */}
           <div className="phone-body">
             <PhoneScreen openApp={openApp} setOpenApp={setOpenApp} />
           </div>
